@@ -24,9 +24,166 @@ function setTask(i,j,v){const a=cur();a.dif[i].t[j].e=v;log('Tarea "'+a.dif[i].t
  if(a.dif[i].t.every(t=>t.e==='Resuelta'))a.ask=a.dif[i].n;save();go(view)}
 function mark(k,name){const a=cur(),d=dif(a,k);if(!d)return;const t=d.t.find(x=>x.n===name);if(t&&t.e!=='Resuelta'){t.e='Resuelta';log('Completó: '+name);save();if(d.t.every(x=>x.e==='Resuelta'))a.ask=d.n;save()}}
 const R={
-inicio(){const a=cur();$('#main').innerHTML='<h1>Confirmar no garantiza asistir. Te ayudamos a llegar.</h1>'+(a?`<div class="card"><span class="tag">${a.estado}</span><h2>${esc(a.esp)} — ${esc(a.lugar)}</h2><p>${fmt(a)}</p><div class="big" id="cd"></div>${a.salida?`<p>Hora de salida planificada: <b>${a.salida}</b></p>`:''}
- <button onclick="S.sel='${a.id}';go('rec')">Reconfirmar asistencia</button><button class="s" onclick="go('plan')">Ver mi plan</button></div>`+(a.ask?askBox(a):''):none());
- const u=()=>{const e=$('#cd');if(!a||!e)return;const m=Rem.dt(a)-new Date();e.textContent=m>0?`Faltan ${Math.floor(m/864e5)} d ${Math.floor(m%864e5/36e5)} h ${Math.floor(m%36e5/6e4)} min`:'La hora ya pasó'};u();setInterval(u,6e4)},
+inicio(){
+  const a = cur();
+  if(!a){
+    $('#main').innerHTML = `
+      <h1>Confirmar no garantiza asistir. Te ayudamos a llegar.</h1>
+      ${none()}
+    `;
+    return;
+  }
+
+  const totalDif = (a.dif || []).length;
+  const totalTasks = (a.dif || []).flatMap(d => d.t || []).length;
+  const doneTasks = (a.dif || []).flatMap(d => d.t || []).filter(t => t.e === 'Resuelta').length;
+  const pendingTasks = totalTasks - doneTasks;
+  const lastConf = (a.conf || []).length ? a.conf[(a.conf || []).length - 1] : null;
+  const reconfLabel = a.estado === ES[3] ? 'Actualizar mi disponibilidad' : 'Reconfirmar asistencia';
+
+  $('#main').innerHTML = `
+    <h1>Confirmar no garantiza asistir. Te ayudamos a llegar.</h1>
+
+    <section class="hero-home card">
+      <div class="hero-home__content">
+        <div class="kicker">MI PRÓXIMA CITA</div>
+        <span class="tag">${a.estado}</span>
+        <h2 class="hero-home__title">${esc(a.esp)} — ${esc(a.lugar)}</h2>
+        <p class="hero-home__meta">${fmt(a)}</p>
+        ${a.dir ? `<p class="hero-home__meta">📍 ${esc(a.dir)}</p>` : ''}
+
+        <div class="countdown-panel">
+          <div class="countdown-label">Tiempo restante</div>
+          <div class="countdown-value" id="cd"></div>
+        </div>
+
+        <div class="cta-row">
+          <button onclick="S.sel='${a.id}';go('rec')">${reconfLabel}</button>
+          <button class="s" onclick="go('plan')">Ver mi plan</button>
+          <button class="s" onclick="go('ayuda')">Necesito ayuda</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics-strip">
+      <div class="metric-card">
+        <div class="metric-card__value">${totalDif}</div>
+        <div class="metric-card__label">Dificultades registradas</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card__value">${pendingTasks}</div>
+        <div class="metric-card__label">Tareas pendientes</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card__value">${doneTasks}/${totalTasks || 0}</div>
+        <div class="metric-card__label">Avance de preparación</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card__value">${a.salida ? 'Lista' : 'Pendiente'}</div>
+        <div class="metric-card__label">Hora de salida</div>
+      </div>
+    </section>
+
+    <section class="home-grid-2">
+      <article class="card soft-card">
+        <div class="section-top">
+          <div>
+            <div class="kicker">ESTADO DE ASISTENCIA</div>
+            <h2>Seguimiento de tu disponibilidad</h2>
+          </div>
+        </div>
+
+        <div class="info-list">
+          <div class="info-item">
+            <span class="info-item__label">Estado actual</span>
+            <span class="info-item__value">${a.estado}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-item__label">Última respuesta</span>
+            <span class="info-item__value">${lastConf ? esc(lastConf.r) : 'Sin respuestas todavía'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-item__label">Última actualización</span>
+            <span class="info-item__value">${lastConf ? new Date(lastConf.w).toLocaleString('es-CL') : '—'}</span>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <button class="s" onclick="go('rec')">Ir a recordatorios</button>
+        </div>
+      </article>
+
+      <article class="card soft-card">
+        <div class="section-top">
+          <div>
+            <div class="kicker">MI PREPARACIÓN</div>
+            <h2>Qué me falta para poder asistir</h2>
+          </div>
+        </div>
+
+        ${
+          totalDif
+          ? `
+            <div class="prep-summary">
+              <p>Tienes <b>${totalDif}</b> dificultad(es) registrada(s) y <b>${pendingTasks}</b> tarea(s) pendiente(s).</p>
+              <ul class="clean-list">
+                ${(a.dif || []).map(d => {
+                  const pend = (d.t || []).filter(t => t.e !== 'Resuelta').length;
+                  return `<li><b>${esc(d.n)}</b> — ${pend} pendiente(s)</li>`;
+                }).join('')}
+              </ul>
+            </div>
+          `
+          : `<p class="empty-inline">Aún no registras dificultades. Si aparece un problema para asistir, entra al <b>Centro de ayuda</b>.</p>`
+        }
+
+        ${a.salida ? `<p class="mini-highlight">🕒 Tu hora de salida estimada es <b>${a.salida}</b>.</p>` : ''}
+
+        <div class="cta-row">
+          <button class="s" onclick="go('ayuda')">Abrir centro de ayuda</button>
+          <button class="s" onclick="go('plan')">Revisar mi plan</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="home-grid-3">
+      <article class="card action-card">
+        <div class="kicker">RECORDATORIOS</div>
+        <h2>Próximos avisos</h2>
+        <p>Revisa tus reconfirmaciones y la planificación de avisos antes de la cita.</p>
+        <button class="s" onclick="go('rec')">Ver recordatorios</button>
+      </article>
+
+      <article class="card action-card">
+        <div class="kicker">TRANSPORTE</div>
+        <h2>Planifica tu traslado</h2>
+        <p>Explora alternativas de locomoción y guarda tu hora estimada de salida.</p>
+        <button class="s" onclick="pick('transporte')">Resolver transporte</button>
+      </article>
+
+      <article class="card action-card">
+        <div class="kicker">PLAN DE ASISTENCIA</div>
+        <h2>Organiza lo pendiente</h2>
+        <p>Haz seguimiento a tus tareas y revisa si ya estás en condiciones de asistir.</p>
+        <button class="s" onclick="go('plan')">Ver mi plan</button>
+      </article>
+    </section>
+
+    ${a.ask ? askBox(a) : ''}
+  `;
+
+  const u = () => {
+    const e = $('#cd');
+    if(!a || !e) return;
+    const m = Rem.dt(a) - new Date();
+    e.textContent = m > 0
+      ? `Faltan ${Math.floor(m/864e5)} d ${Math.floor(m%864e5/36e5)} h ${Math.floor(m%36e5/6e4)} min`
+      : 'La hora ya pasó';
+  };
+
+  u();
+  countdownTimer = setInterval(u, 60000);
+},
 citas(){const e=S.edit?S.a.find(x=>x.id===S.edit):{};
  $('#main').innerHTML=`<h1>Mis citas médicas</h1><form class="card" onsubmit="saveA(event)"><h2>${e.id?'Editar':'Registrar'} cita</h2><div class="row"><div><label for="esp">Especialidad</label><input id="esp" required value="${esc(e.esp||'Traumatología')}"></div><div><label for="lug">Establecimiento</label><input id="lug" required value="${esc(e.lugar||'Hospital San Pablo')}"></div></div>
  <label for="dir">Dirección</label><input id="dir" value="${esc(e.dir||'Coquimbo')}"><div class="row"><div><label for="fec">Fecha</label><input id="fec" type="date" required value="${e.fecha||''}"></div><div><label for="hor">Hora</label><input id="hor" type="time" required value="${e.hora||''}"></div></div>
@@ -94,3 +251,229 @@ function trAns(n){const a=cur(),d=dif(a,'transporte');if(n===1)d.t.forEach(t=>t.
  if(n===1)a.ask='transporte';log('Seguimiento transporte: '+n);save();go('plan')}
 nav();go('inicio');
 setInterval(()=>S.a.forEach(a=>{if(a.estado===ES[6])return;Rem.plan(a,S.cfg.int?'intensivo':S.cfg.modo).forEach(r=>{const k=a.id+r.h;if(r.en<=new Date()&&!(S.sent||(S.sent={}))[k]){S.sent[k]=1;Rem.notify(a.esp+': tu cita es en '+r.h+' h. ¿Sigues pudiendo asistir?');log('Aviso en página: '+r.h+' h');save()}})}),3e4);
+/* ===== HOME REDISEÑADO ===== */
+.kicker{
+  display:inline-block;
+  margin-bottom:10px;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.14em;
+  color:var(--p);
+  text-transform:uppercase;
+}
+
+.hero-home{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at top right, rgba(22,160,163,.12), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f6fbfb 100%);
+  border:1px solid #dbe9ea;
+  box-shadow:0 18px 45px rgba(8, 71, 78, .08);
+}
+
+.hero-home__content{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.hero-home__title{
+  margin:0;
+  font-size:clamp(24px, 3vw, 34px);
+  line-height:1.15;
+}
+
+.hero-home__meta{
+  margin:0;
+  color:var(--mute);
+  font-size:15px;
+}
+
+.countdown-panel{
+  margin-top:8px;
+  padding:16px 18px;
+  border-radius:18px;
+  background:linear-gradient(135deg, #0a5c63, #0c7779);
+  color:#fff;
+  width:min(100%, 420px);
+  box-shadow:0 14px 30px rgba(10,92,99,.18);
+}
+
+.countdown-label{
+  font-size:12px;
+  font-weight:700;
+  opacity:.85;
+  margin-bottom:6px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+
+.countdown-value{
+  font:800 clamp(24px, 3.6vw, 36px)/1.15 'Manrope', sans-serif;
+  letter-spacing:-1px;
+}
+
+.metrics-strip{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0,1fr));
+  gap:15px;
+  margin:18px 0;
+}
+
+.metric-card{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:18px;
+  box-shadow:var(--shadow);
+}
+
+.metric-card__value{
+  font:800 28px 'Manrope', sans-serif;
+  color:var(--d);
+  letter-spacing:-1px;
+}
+
+.metric-card__label{
+  color:var(--mute);
+  font-size:13px;
+  margin-top:6px;
+}
+
+.home-grid-2{
+  display:grid;
+  grid-template-columns:1.2fr 1fr;
+  gap:16px;
+  margin:18px 0;
+}
+
+.home-grid-3{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:16px;
+  margin:18px 0;
+}
+
+.soft-card{
+  background:linear-gradient(180deg, #ffffff 0%, #fbfdfd 100%);
+}
+
+.section-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+  margin-bottom:8px;
+}
+
+.info-list{
+  display:grid;
+  gap:10px;
+  margin-top:10px;
+}
+
+.info-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:15px;
+  padding:12px 14px;
+  border:1px solid #e2ecec;
+  border-radius:14px;
+  background:#f9fcfc;
+}
+
+.info-item__label{
+  color:var(--mute);
+  font-size:13px;
+  font-weight:700;
+}
+
+.info-item__value{
+  color:var(--d);
+  font-size:14px;
+  font-weight:700;
+  text-align:right;
+}
+
+.clean-list{
+  margin:10px 0 0 18px;
+  padding:0;
+  color:var(--mute);
+}
+
+.clean-list li{
+  margin:8px 0;
+}
+
+.prep-summary p{
+  margin-top:0;
+}
+
+.mini-highlight{
+  margin-top:14px;
+  padding:12px 14px;
+  background:#eef8f7;
+  border:1px solid #d2ebe8;
+  border-radius:14px;
+  color:#0b5d60;
+  font-size:14px;
+}
+
+.action-card h2{
+  margin-bottom:6px;
+}
+
+.action-card p{
+  min-height:66px;
+}
+
+.cta-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:12px;
+}
+
+.cta-row button,
+.cta-row .btn{
+  margin:0;
+}
+
+.empty-inline{
+  color:var(--mute);
+  background:#f8fbfb;
+  border:1px dashed #d7e7e8;
+  border-radius:14px;
+  padding:14px;
+}
+
+/* responsive */
+@media (max-width: 980px){
+  .metrics-strip{
+    grid-template-columns:repeat(2, minmax(0,1fr));
+  }
+  .home-grid-2{
+    grid-template-columns:1fr;
+  }
+  .home-grid-3{
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width: 640px){
+  .metrics-strip{
+    grid-template-columns:1fr;
+  }
+  .countdown-panel{
+    width:100%;
+  }
+  .info-item{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .info-item__value{
+    text-align:left;
+  }
+}
